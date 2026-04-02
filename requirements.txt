@@ -1,20 +1,10 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-
-streamlit==1.41.1
-
-torch==2.2.2
-sentence-transformers==2.7.0
-transformers==4.41.2
-
-faiss-cpu==1.7.4
-rank-bm25==0.2.2
-openai==2.24.0
-
-numpy<2.0
-pandas<3.0
-scikit-learn==1.4.2
-
+streamlit
+openai
+faiss-cpu
+numpy
 python-dotenv
+rank-bm25
+sentence-transformers
 requests
 pdfplumber
 beautifulsoup4
