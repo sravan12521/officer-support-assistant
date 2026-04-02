@@ -1,12 +1,8 @@
-
 #!/bin/bash
 set -e
 
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-
-exec python -m streamlit run /home/site/wwwroot/app.py \
-  --server.port "${PORT:-8000}" \
+exec python -m streamlit run app.py \
+  --server.port "${PORT:-10000}" \
   --server.address 0.0.0.0 \
   --server.headless true \
   --server.enableCORS false \
