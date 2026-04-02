@@ -74,11 +74,21 @@ TOP_K_FAISS = 18
 TOP_K_BM25 = 18
 TOP_K_FINAL = 12
 
-# Panel heights for independent scrolling
-LEFT_PANEL_HEIGHT = 760
-CENTER_PANEL_HEIGHT = 760
-RIGHT_PANEL_HEIGHT = 760
-CHAT_HISTORY_HEIGHT = 500
+# =============================
+# SESSION STATE
+# =============================
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+if "sources" not in st.session_state:
+    st.session_state.sources = []
+if "last_intent" not in st.session_state:
+    st.session_state.last_intent = "general"
+
+# Panel heights
+LEFT_PANEL_HEIGHT = 720
+CENTER_PANEL_HEIGHT = 650
+RIGHT_PANEL_HEIGHT = 720
+CHAT_HISTORY_HEIGHT = 90 if len(st.session_state.get("chat", [])) == 0 else 380
 
 # =============================
 # CACHED LOADERS
@@ -111,9 +121,18 @@ def build_bm25(meta: List[Dict[str, Any]]):
         corpus_tokens.append(tokens)
     return BM25Okapi(corpus_tokens)
 
-embedder = load_embedder()
-index, metadata = load_index_and_meta()
-bm25 = build_bm25(metadata)
+@st.cache_resource(show_spinner="Loading retrieval resources...")
+def load_all_resources():
+    embedder_local = load_embedder()
+    index_local, metadata_local = load_index_and_meta()
+    bm25_local = build_bm25(metadata_local)
+    return embedder_local, index_local, metadata_local, bm25_local
+
+# Lazy-loaded globals
+embedder = None
+index = None
+metadata = None
+bm25 = None
 
 # =============================
 # QUERY EVAL LOGGING
@@ -335,6 +354,11 @@ def _tokenize_for_bm25(text: str) -> List[str]:
     return re.findall(r"[a-z0-9_'-]+", (text or "").lower())
 
 def retrieve(question: str, mode: str = "All Sources") -> Tuple[str, List[str], List[Dict[str, Any]]]:
+    global embedder, index, metadata, bm25
+
+    if embedder is None or index is None or metadata is None or bm25 is None:
+        embedder, index, metadata, bm25 = load_all_resources()
+
     expanded = expand_query(question, max_expansions_per_key=8, include_keys=False)
     matched_keys = debug_matched_keys(question)
 
@@ -539,7 +563,6 @@ RULES:
     logger.info("EXPANDED_QUERY: %s", expanded)
     logger.info("MATCHED_KEYS: %s", ", ".join(matched_keys) if matched_keys else "none")
     logger.info("HITS_USED: %s", len(chunks))
-
     logger.info("SYSTEM_PROMPT_BEGIN\n%s\nSYSTEM_PROMPT_END", system_msg)
     logger.info("USER_PROMPT_BEGIN\n%s\nUSER_PROMPT_END", user_msg)
 
@@ -578,46 +601,36 @@ RULES:
     return answer, chunks, intent
 
 # =============================
-# SESSION STATE
-# =============================
-if "chat" not in st.session_state:
-    st.session_state.chat = []
-if "sources" not in st.session_state:
-    st.session_state.sources = []
-if "last_intent" not in st.session_state:
-    st.session_state.last_intent = "general"
-
-# =============================
 # UI THEME
 # =============================
 st.markdown(
-    f"""
+    """
 <style>
-html, body, [data-testid="stAppViewContainer"], .stApp {{
+html, body, [data-testid="stAppViewContainer"], .stApp {
     height: 100vh;
-}}
+}
 
-body {{
+body {
     overflow: hidden;
-}}
+}
 
-.block-container {{
+.block-container {
     padding-top: 0.6rem !important;
     padding-bottom: 0.5rem !important;
     max-width: 1400px;
-}}
+}
 
-header[data-testid="stHeader"] {{ height: 0px; }}
-div[data-testid="stToolbar"] {{ visibility: hidden; height: 0px; }}
-#MainMenu {{ visibility: hidden; }}
-footer {{ visibility: hidden; }}
+header[data-testid="stHeader"] { height: 0px; }
+div[data-testid="stToolbar"] { visibility: hidden; height: 0px; }
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
 
-.stApp {{
+.stApp {
     background: radial-gradient(circle at top, #0a1733 0%, #040814 60%);
     color: white;
-}}
+}
 
-.header {{
+.header {
     background: linear-gradient(135deg, #081b3a, #041024);
     padding: 0.95rem 1.2rem;
     border-radius: 16px;
@@ -627,36 +640,36 @@ footer {{ visibility: hidden; }}
     align-items: center;
     border: 1px solid rgba(120,160,255,0.18);
     box-shadow: 0 14px 34px rgba(0,0,0,0.45);
-}}
-.header-title {{ font-size: 1.45rem; font-weight: 900; letter-spacing: 0.02em; }}
-.header-sub {{ font-size: 0.85rem; color: #b8c4ff; }}
+}
+.header-title { font-size: 1.45rem; font-weight: 900; letter-spacing: 0.02em; }
+.header-sub { font-size: 0.85rem; color: #b8c4ff; }
 
-.badge {{
+.badge {
     background: rgba(16,42,86,0.7);
     padding: 0.35rem 0.8rem;
     border-radius: 999px;
     font-size: 0.8rem;
     border: 1px solid rgba(56,189,248,0.25);
-}}
+}
 
-.panel-shell {{
+.panel-shell {
     background: rgba(8,18,46,0.92);
     border-radius: 18px;
     padding: 1rem;
     border: 1px solid rgba(120,160,255,0.18);
     box-shadow: 0 16px 40px rgba(0,0,0,0.50);
-}}
+}
 
-.bubble-user {{
+.bubble-user {
     background: linear-gradient(135deg, #1d4ed8, #38bdf8);
     color: white;
     padding: 0.70rem 0.85rem;
     border-radius: 16px;
     margin: 0.35rem 0 0.6rem 0;
     font-size: 0.95rem;
-}}
+}
 
-.bubble-bot {{
+.bubble-bot {
     background: rgba(11, 21, 52, 0.95);
     color: #e5e7eb;
     padding: 0.70rem 0.85rem;
@@ -664,18 +677,18 @@ footer {{ visibility: hidden; }}
     margin: 0.35rem 0 0.6rem 0;
     border: 1px solid rgba(110, 140, 245, 0.35);
     font-size: 0.95rem;
-}}
+}
 
-.small-muted {{ color: #b8c4ff; font-size: 0.82rem; }}
+.small-muted { color: #b8c4ff; font-size: 0.82rem; }
 
-.stTextInput>div>div>input {{
+.stTextInput>div>div>input {
     background-color: rgba(10, 16, 40, 0.9);
     border-radius: 999px;
     border: 1px solid rgba(99, 102, 241, 0.55);
     padding: 0.80rem 1rem;
     color: #f8fafc;
-}}
-.stButton>button {{
+}
+.stButton>button {
     background: linear-gradient(135deg, #1d4ed8, #38bdf8);
     color: white;
     font-weight: 800;
@@ -683,7 +696,7 @@ footer {{ visibility: hidden; }}
     padding: 0.55rem 1.4rem;
     border: none;
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
-}}
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -692,6 +705,8 @@ footer {{ visibility: hidden; }}
 # =============================
 # HEADER
 # =============================
+resource_badge = "Hybrid: FAISS+BM25 • Load on first query"
+
 st.markdown(
     f"""
 <div class="header">
@@ -699,7 +714,7 @@ st.markdown(
     <div class="header-title">🚓 Officer Support Assistant</div>
     <div class="header-sub">Sarpy County Sheriff’s Office • Policies • Statutes • Case Law</div>
   </div>
-  <div class="badge">Vectors: {index.ntotal} • Chunks: {len(metadata)} • Hybrid: FAISS+BM25</div>
+  <div class="badge">{resource_badge}</div>
 </div>
 """,
     unsafe_allow_html=True,
@@ -835,6 +850,9 @@ with col_main:
             submitted = st.form_submit_button("Send")
 
         if submitted and question.strip():
+            if embedder is None or index is None or metadata is None or bm25 is None:
+                st.info("Loading retrieval resources for the first query. This may take a bit on Render.")
+
             with st.spinner("Searching and answering..."):
                 t0 = time.perf_counter()
                 answer, srcs, intent = ask_llm(question.strip(), mode=mode, user_role=role)
